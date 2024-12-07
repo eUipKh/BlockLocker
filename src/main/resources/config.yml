@@ -11,13 +11,17 @@
 # - translations-es.yml (by TheCiROMG)
 # - translations-fr.yml (by Kervinou)
 # - translations-hu.yml (by Crankiee)
+# - translations-id.yml (by DustyGanteng)
+# - translations-it.yml (by Fede2782)
 # - translations-ja.yml (by ikafly144)
 # - translations-kr.yml (by iLar0213)
 # - translations-nl.yml
 # - translations-pl.yml (by Asentra_/KebabXL)
-# - translations-tr.yml (by ataturkthemcpro)
-# - translations-zh.yml (by 2125368097)
-# - translations-zh-tw.yml (by Shen-Ta Hsieh)
+# - translations-tr.yml (by lostnt1)
+# - translations-vi.yml (by SonThanhVN)
+# - translations-zh.yml (by Halogly)
+# - translations-zh-hk.yml (by Halogly)
+# - translations-zh-tw.yml (by Halogly)
 # For other languages, you'll get the English translations as a
 # starting point. It is highly appreciated if you submit your
 # translations to the plugin author, so that others can use them
@@ -45,6 +49,7 @@ protectableContainers:
 - chipped_anvil
 - cyan_shulker_box
 - crafting_table
+- crafter
 - damaged_anvil
 - dispenser
 - dropper
@@ -79,15 +84,26 @@ connectContainers: false
 # http://minecraft.gamepedia.com/Data_values#Door
 protectableDoors:
 - acacia_door
+- bamboo_door
 - birch_door
+- cherry_door
+- copper_door
 - crimson_door
 - dark_oak_door
+- exposed_copper_door
 - iron_door
 - jungle_door
 - mangrove_door
 - oak_door
+- oxidized_copper_door
+- pale_oak_door
 - spruce_door
 - warped_door
+- waxed_copper_door
+- waxed_exposed_copper_door
+- waxed_oxidized_copper_door
+- waxed_weathered_copper_door
+- weathered_copper_door
 
 # All protections (except doors) that consist not only of the block listed here,
 # but also of a supporting block. This is normally the block directly below.
@@ -99,12 +115,18 @@ protectableDoors:
 protectableAttachables:
 - acacia_fence_gate
 - acacia_trapdoor
+- bamboo_fence_gate
+- bamboo_trapdoor
 - birch_fence_gate
 - birch_trapdoor
+- cherry_fence_gate
+- cherry_trapdoor
+- copper_trapdoor
 - crimson_fence_gate
 - crimson_trapdoor
 - dark_oak_fence_gate
 - dark_oak_trapdoor
+- exposed_copper_trapdoor
 - iron_trapdoor
 - jungle_fence_gate
 - jungle_trapdoor
@@ -112,13 +134,18 @@ protectableAttachables:
 - mangrove_trapdoor
 - oak_fence_gate
 - oak_trapdoor
+- oxidized_copper_trapdoor
+- pale_oak_fence_gate
+- pale_oak_trapdoor
 - spruce_fence_gate
 - spruce_trapdoor
 - warped_fence_gate
 - warped_trapdoor
-
-
-
+- weathered_copper_trapdoor
+- waxed_copper_trapdoor
+- waxed_exposed_copper_trapdoor
+- waxed_weathered_copper_trapdoor
+- waxed_oxidized_copper_trapdoor
 
 # The default amount of seconds a door stays open before closing automatically.
 # Players can override this value by putting a [Timer:X] tag on the sign, where

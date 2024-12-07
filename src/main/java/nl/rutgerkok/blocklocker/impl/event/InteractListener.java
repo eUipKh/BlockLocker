@@ -1,34 +1,23 @@
 package nl.rutgerkok.blocklocker.impl.event;
 
-import com.google.common.collect.ImmutableSet;
-import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.chat.BaseComponent;
-import net.md_5.bungee.api.chat.ClickEvent;
-import nl.rutgerkok.blocklocker.AttackType;
-import nl.rutgerkok.blocklocker.Permissions;
-import nl.rutgerkok.blocklocker.ProtectionSign;
-import nl.rutgerkok.blocklocker.SignType;
-import nl.rutgerkok.blocklocker.Translator.Translation;
-import nl.rutgerkok.blocklocker.event.PlayerProtectionCreateEvent;
-import nl.rutgerkok.blocklocker.impl.BlockLockerPluginImpl;
-import nl.rutgerkok.blocklocker.impl.TextComponents;
-import nl.rutgerkok.blocklocker.location.IllegalLocationException;
-import nl.rutgerkok.blocklocker.profile.PlayerProfile;
-import nl.rutgerkok.blocklocker.profile.Profile;
-import nl.rutgerkok.blocklocker.protection.Protection;
-import nl.rutgerkok.blocklocker.protection.Protection.SoundCondition;
+import java.util.Optional;
+import java.util.Set;
+
+import nl.rutgerkok.blocklocker.*;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
-import org.bukkit.block.DoubleChest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.block.data.type.WallSign;
+import org.bukkit.block.sign.Side;
+import org.bukkit.block.sign.SignSide;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
@@ -40,18 +29,23 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import com.google.common.collect.ImmutableSet;
+
+import nl.rutgerkok.blocklocker.Translator.Translation;
+import nl.rutgerkok.blocklocker.event.PlayerProtectionCreateEvent;
+import nl.rutgerkok.blocklocker.impl.BlockLockerPluginImpl;
+import nl.rutgerkok.blocklocker.location.IllegalLocationException;
+import nl.rutgerkok.blocklocker.profile.PlayerProfile;
+import nl.rutgerkok.blocklocker.profile.Profile;
+import nl.rutgerkok.blocklocker.protection.Protection;
+import nl.rutgerkok.blocklocker.protection.Protection.SoundCondition;
 
 public final class InteractListener extends EventListener {
 
-    private static Set<BlockFace> AUTOPLACE_BLOCK_FACES = ImmutableSet.of(BlockFace.NORTH, BlockFace.EAST,
+    private static final Set<BlockFace> AUTOPLACE_BLOCK_FACES = ImmutableSet.of(BlockFace.NORTH, BlockFace.EAST,
             BlockFace.SOUTH, BlockFace.WEST, BlockFace.UP);
 
     public InteractListener(BlockLockerPluginImpl plugin) {
@@ -88,18 +82,10 @@ public final class InteractListener extends EventListener {
         if (gameMode == null) {
             return false;
         }
-        switch (gameMode) {
-            case ADVENTURE:
-                return false;
-            case CREATIVE:
-                return true;
-            case SPECTATOR:
-                return false;
-            case SURVIVAL:
-                return true;
-            default:
-                return false; // Speculative
-        }
+        return switch (gameMode) {
+            case ADVENTURE, SPECTATOR -> false;
+            case CREATIVE, SURVIVAL -> true;
+        };
     }
 
     private boolean checkAllowed(Player player, Protection protection, boolean clickedSign) {
@@ -126,24 +112,20 @@ public final class InteractListener extends EventListener {
     }
 
     /**
-     * Gets the block the inventory is stored in, or null if the inventory is not
-     * stored in a block.
+     * Gets the block the inventory is currently positioned at. Note: even for
+     * inventories in entities, this will return a block.
      *
-     * @param inventory The inventory.
-     * @return The block, or null.
+     * @param inventory
+     *            The inventory.
+     * @return The block, or null if the inventory doesn't have a location (only
+     *         custom inventories as far as I know).
      */
     private Block getInventoryBlockOrNull(Inventory inventory) {
-        InventoryHolder holder = inventory.getHolder();
-        if (holder instanceof BlockState) {
-            return ((BlockState) holder).getBlock();
+        Location location = inventory.getLocation();
+        if (location == null) {
+            return null;
         }
-        if (holder instanceof DoubleChest) {
-            InventoryHolder leftHolder = ((DoubleChest) holder).getLeftSide();
-            if (leftHolder instanceof BlockState) {
-                return ((BlockState) leftHolder).getBlock();
-            }
-        }
-        return null;
+        return location.getBlock();
     }
 
     private org.bukkit.block.data.type.Sign getRotatedSignPost(Player player, Material signMaterial) {
@@ -187,10 +169,9 @@ public final class InteractListener extends EventListener {
 
         // Select signs
         if (clickedSign) {
-            if ((isOwner || player.hasPermission(Permissions.CAN_EDIT)) && !usedOffHand) {
-                Sign sign = (Sign) clickedBlock.getState();
-                plugin.getSignSelector().setSelectedSign(player, sign);
-                sendSelectedSignMessage(player);
+            if ((!isOwner && !player.hasPermission(Permissions.CAN_ADMIN)) || usedOffHand || player.isSneaking()) {
+                // Don't open sign editor in these cases
+                event.setCancelled(true);
             }
             return;
         }
@@ -202,7 +183,8 @@ public final class InteractListener extends EventListener {
         }
 
         // Open (double/trap/fence) doors manually
-        boolean clickedMainBlock = plugin.getChestSettings().canProtect(clickedBlock);
+        boolean clickedMainBlock = plugin.getProtectionFinder().findProtection(clickedBlock, SearchMode.NO_SUPPORTING_BLOCKS)
+                .filter(p -> p.equals(protection)).isPresent();
         if (protection.canBeOpened() && !isSneakPlacing(player) && clickedMainBlock) {
             event.setCancelled(true);
 
@@ -279,7 +261,7 @@ public final class InteractListener extends EventListener {
     @EventHandler(ignoreCancelled = true)
     public void onInventoryMoveItemEvent(InventoryMoveItemEvent event) {
         Block from = getInventoryBlockOrNull(event.getSource());
-        if(from != null) {
+        if (from != null) {
             if (isRedstoneDenied(from)) {
                 event.setCancelled(true);
                 return;
@@ -307,6 +289,9 @@ public final class InteractListener extends EventListener {
 
         Player player = event.getPlayer();
         Block block = event.getClickedBlock();
+        if (block == null) {
+            return;
+        }
         Material material = block.getType();
         boolean clickedSign = Tag.STANDING_SIGNS.isTagged(material) || Tag.WALL_SIGNS.isTagged(material);
         // When using the offhand check, access checks must still be performed,
@@ -314,7 +299,7 @@ public final class InteractListener extends EventListener {
         boolean usedOffHand = event.getHand() == EquipmentSlot.OFF_HAND;
         Optional<Protection> protection = plugin.getProtectionFinder().findProtection(block);
 
-        if (!protection.isPresent()) {
+        if (protection.isEmpty()) {
             if (tryPlaceSign(event.getPlayer(), block, event.getBlockFace(), event.getHand(), SignType.PRIVATE)) {
                 event.setCancelled(true);
             }
@@ -408,45 +393,8 @@ public final class InteractListener extends EventListener {
         if (openSeconds <= 0) {
             return;
         }
-        plugin.runLater(() -> protection.setOpen(false, SoundCondition.ALWAYS), openSeconds * 20);
-    }
-
-    private void sendSelectedSignMessage(Player player) {
-        String message = plugin.getTranslator().get(Translation.PROTECTION_SELECTED_SIGN);
-
-        List<BaseComponent> textComponent = new ArrayList<>();
-        while (true) {
-            int firstOpenBracket = message.indexOf("[");
-            if (firstOpenBracket == -1) {
-                // No new opening bracket
-                TextComponents.addLegacyText(textComponent, message);
-                break;
-            }
-
-            // Add everything up to the closing bracket
-            TextComponents.addLegacyText(textComponent, message.substring(0, firstOpenBracket));
-
-            // Check what's after the opening bracket
-            String remainingMessage = message.substring(firstOpenBracket);
-            int closeBracketIndex = remainingMessage.indexOf("]");
-            if (closeBracketIndex == -1) {
-                TextComponents.addLegacyText(textComponent, remainingMessage);
-                break;
-            }
-
-            // Add this part as link
-            String linkText = remainingMessage.substring(0, closeBracketIndex + 1);
-            String textOnLine = ChatColor.stripColor(linkText);
-            TextComponents.addLegacyText(textComponent, linkText, part -> {
-                        part.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                                "/blocklocker:blocklocker ~ " + textOnLine));
-                            });
-
-            // Next!
-            message = remainingMessage.substring(closeBracketIndex + 1);
-        }
-
-        player.spigot().sendMessage(textComponent.toArray(new BaseComponent[textComponent.size()]));
+        plugin.runLater(protection
+                .getSomeProtectedBlock(), () -> protection.setOpen(false, SoundCondition.ALWAYS), openSeconds * 20);
     }
 
     private Material toWallSign(Material signMaterial) {
@@ -516,7 +464,7 @@ public final class InteractListener extends EventListener {
         String[] newLines = plugin.getSignParser().getDisplayLines(protectionSign);
 
         // Test if we can place it
-        SignChangeEvent signChangeEvent = new SignChangeEvent(sign.getBlock(), player, newLines);
+        SignChangeEvent signChangeEvent = new SignChangeEvent(sign.getBlock(), player, newLines, Side.FRONT);
         Bukkit.getPluginManager().callEvent(signChangeEvent);
 
         if (sign.getBlock().getType() != sign.getType()) {
@@ -532,8 +480,9 @@ public final class InteractListener extends EventListener {
         }
 
         // Actually write the text
+        SignSide frontSide = sign.getSide(Side.FRONT);
         for (int i = 0; i < newLines.length; i++) {
-            sign.setLine(i, newLines[i]);
+            frontSide.setLine(i, newLines[i]);
         }
         sign.update();
 

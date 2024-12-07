@@ -8,14 +8,17 @@ import java.io.Reader;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.Event;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
@@ -28,7 +31,6 @@ import nl.rutgerkok.blocklocker.ProtectableBlocksSettings;
 import nl.rutgerkok.blocklocker.ProtectionFinder;
 import nl.rutgerkok.blocklocker.ProtectionUpdater;
 import nl.rutgerkok.blocklocker.SignParser;
-import nl.rutgerkok.blocklocker.SignSelector;
 import nl.rutgerkok.blocklocker.Translator;
 import nl.rutgerkok.blocklocker.group.CombinedGroupSystem;
 import nl.rutgerkok.blocklocker.group.GroupSystem;
@@ -46,25 +48,23 @@ import nl.rutgerkok.blocklocker.impl.group.SimpleClansGroupSystem;
 import nl.rutgerkok.blocklocker.impl.group.TownyGroupSystem;
 import nl.rutgerkok.blocklocker.impl.group.mcMMOGroupSystem;
 import nl.rutgerkok.blocklocker.impl.location.TownyLocationChecker;
-import nl.rutgerkok.blocklocker.impl.nms.NMSAccessorProvider;
-import nl.rutgerkok.blocklocker.impl.nms.ServerSpecific;
 import nl.rutgerkok.blocklocker.impl.profile.ProfileFactoryImpl;
 import nl.rutgerkok.blocklocker.impl.updater.Updater;
 import nl.rutgerkok.blocklocker.location.CombinedLocationChecker;
 import nl.rutgerkok.blocklocker.location.LocationChecker;
 
 public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlugin {
+
     private ChestSettings chestSettings;
     private CombinedGroupSystem combinedGroupSystem;
     private Config config;
-    private ServerSpecific nms;
     private ProfileFactoryImpl profileFactory;
     private ProtectionFinderImpl protectionFinder;
     private ProtectionUpdater protectionUpdater;
     private SignParser signParser;
-    private SignSelector signSelector;
     private Translator translator;
     private CombinedLocationChecker combinedLocationChecker;
+    private SchedulerSupport schedulerSupport;
     private HopperCache redstoneProtectCache;
 
     @Override
@@ -149,11 +149,6 @@ public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlug
     }
 
     @Override
-    public SignSelector getSignSelector() {
-        return signSelector;
-    }
-
-    @Override
     public Translator getTranslator() {
         return translator;
     }
@@ -188,6 +183,9 @@ public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlug
     }
 
     private void loadServices() {
+        // Scheduler
+        schedulerSupport = new SchedulerSupport(this);
+
         // Configuration
         saveDefaultConfig();
         config = new Config(getLogger(), getConfig());
@@ -202,11 +200,10 @@ public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlug
         // Parsers and finders
         profileFactory = new ProfileFactoryImpl(combinedGroupSystem, translator);
         chestSettings = new ChestSettingsImpl(translator, config);
-        signParser = new SignParserImpl(chestSettings, nms, profileFactory);
+        signParser = new SignParserImpl(chestSettings, profileFactory);
         BlockFinder blockFinder = BlockFinder.create(signParser, config.getConnectContainers());
         protectionFinder = new ProtectionFinderImpl(blockFinder, chestSettings);
         protectionUpdater = new ProtectionUpdaterImpl(getServer(), signParser, profileFactory);
-        signSelector = new SignSelectorImpl(this);
         redstoneProtectCache = new HopperCacheImpl(this);
     }
 
@@ -236,16 +233,6 @@ public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlug
 
     @Override
     public void onEnable() {
-        // NMS checks
-        try {
-            this.nms = NMSAccessorProvider.create();
-        } catch (Throwable t) {
-            getLogger()
-                    .log(Level.SEVERE, "This Minecraft version is not supported. Find another version of the plugin, if available.", t);
-            Bukkit.getPluginManager().disablePlugin(this);
-            return;
-        }
-
         loadServices();
 
         // Events
@@ -283,13 +270,30 @@ public class BlockLockerPluginImpl extends JavaPlugin implements BlockLockerPlug
     }
 
     @Override
-    public void runLater(Runnable runnable) {
-        getServer().getScheduler().runTask(this, runnable);
+    public void runLater(Block block, Runnable runnable) {
+        schedulerSupport.runLater(block, runnable);
     }
 
     @Override
-    public void runLater(Runnable runnable, int ticks) {
-        getServer().getScheduler().runTaskLater(this, runnable, ticks);
+    public void runLater(Block block, Runnable runnable, int ticks) {
+        schedulerSupport.runLater(block, runnable, ticks);
+    }
+
+    @Override
+    public void runLaterGlobally(Runnable runnable, int ticks) {
+        schedulerSupport.runLaterGlobally(runnable, ticks);
+    }
+
+    /**
+     * Folia-compatible alternative for running a timer task asynchronously.
+     *
+     * @param task
+     *            The task.
+     * @param checkInterval
+     *            The check interval in ticks.
+     */
+    public void runTimerAsync(Consumer<BukkitTask> task, long checkInterval) {
+        schedulerSupport.runTimerAsync(task, checkInterval);
     }
 
 }
